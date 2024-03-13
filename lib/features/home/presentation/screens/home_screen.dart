@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/core.dart';
 import '../../../magazines_details/presentation/screens/magazines_details_screen.dart';
 import '../widgets/all_editions_list_view.dart';
+import '../widgets/infinite_dragable_slider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -72,11 +73,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 color: Colors.white,
               ),
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 24),
             Expanded(
-                child: MagazineCoverImage(
-                    magazine: Magazine.fakeMagazinesValues[0])),
-            SizedBox(height: 52),
+              child: InfiniteDragableSlider(
+                itemCount: Magazine.fakeMagazinesValues.length,
+                itemBuilder: (context, index) =>
+                    MagazineCoverImage(magazine: magazines[index]),
+              ),
+            ),
+            SizedBox(height: 72),
             SizedBox(
               height: 140,
               child: AllEditionsListView(magazines: magazines),
