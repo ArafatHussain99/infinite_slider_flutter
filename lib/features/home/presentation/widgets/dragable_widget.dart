@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 enum SlideDirection { left, right }
@@ -23,12 +25,18 @@ class _DragableWidgetState extends State<DragableWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController restoreController;
 
+  late Size screenSize;
+
   final _widgetKey = GlobalKey();
   Offset startOffset = Offset.zero;
   Offset panOffset = Offset.zero;
 
   Size size = Size.zero;
-  double agle = 0.0;
+  double angle = 0.0;
+
+  bool itWasMadeSlide = false;
+
+  double get outSizeLimit => size.width * 0.65;
 
   void onPanStart(DragStartDetails details) {
     if (!restoreController.isAnimating) {
@@ -42,26 +50,77 @@ class _DragableWidgetState extends State<DragableWidget>
     if (!restoreController.isAnimating) {
       setState(() {
         panOffset = details.globalPosition - startOffset;
+        angle = currentAngle;
       });
     }
   }
 
-  void onPanEnd(DragUpdateDetails details) {
+  void onPanEnd(DragEndDetails details) {
     if (restoreController.isAnimating) {
       return;
     }
+    final velocityX = details.velocity.pixelsPerSecond.dx;
+    final positionX = currentPosition.dx;
+    if (velocityX < -1000 || positionX < -outSizeLimit) {
+      itWasMadeSlide = widget.onSlideOut != null;
+      widget.onSlideOut?.call(SlideDirection.left);
+    }
+    if (velocityX > 1000 || positionX > screenSize.width - outSizeLimit) {
+      widget.onSlideOut?.call(SlideDirection.right);
+      itWasMadeSlide = widget.onSlideOut != null;
+    }
+    restoreController.forward();
+  }
+
+  void restoreAnimationListener() {
+    if (restoreController.isCompleted) {
+      restoreController.reset();
+      panOffset = Offset.zero;
+      itWasMadeSlide = false;
+      angle = 0.0;
+      setState(() {});
+    }
+  }
+
+  Offset get currentPosition {
+    final renderBox =
+        _widgetKey.currentContext?.findRenderObject() as RenderBox?;
+    return renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+  }
+
+  double get currentAngle {
+    return currentPosition.dx < 0
+        ? (pi * 0.2) * currentPosition.dx / size.width
+        : currentPosition.dx + size.width > screenSize.width
+            ? (pi * 0.2) *
+                (currentPosition.dx + size.width - screenSize.width) /
+                size.width
+            : 0.0;
+  }
+
+  void getChildSize() {
+    size =
+        (_widgetKey.currentContext?.findRenderObject() as RenderBox?)?.size ??
+            Size.zero;
   }
 
   @override
   void initState() {
     restoreController =
-        AnimationController(vsync: this, duration: kThemeAnimationDuration);
+        AnimationController(vsync: this, duration: kThemeAnimationDuration)
+          ..addListener(restoreAnimationListener);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      screenSize = MediaQuery.of(context).size;
+      getChildSize();
+    });
     super.initState();
   }
 
   @override
   void dispose() {
-    restoreController.dispose();
+    restoreController
+      ..removeListener(restoreAnimationListener)
+      ..dispose();
     super.dispose();
   }
 
@@ -77,7 +136,21 @@ class _DragableWidgetState extends State<DragableWidget>
     return GestureDetector(
       onPanStart: onPanStart,
       onPanUpdate: onPanUpdate,
-      child: Transform.translate(offset: panOffset, child: widget.child),
+      onPanEnd: onPanEnd,
+      child: AnimatedBuilder(
+        animation: restoreController,
+        builder: (context, child) {
+          final value = 1 - restoreController.value;
+          return Transform.translate(
+            offset: panOffset * value,
+            child: Transform.rotate(
+              angle: angle * (itWasMadeSlide ? 1 : value),
+              child: child,
+            ),
+          );
+        },
+        child: child,
+      ),
     );
   }
 }
